@@ -86,15 +86,7 @@ The three guards differ in what failure means:
   their rows load on demand).
 - `checked` appends ✓ when it succeeds — the "this is the current choice"
   marker on defaults, DNS, channel rows.
-- `disabled` keeps the row listed but dims it, marks it ✓, and makes it
-  unselectable: cursor, pointer, and Enter all step over it, and search omits
-  it. The Install submenus use it so software already on the machine reads as
-  installed rather than vanishing from the list it was installed from — the
-  list stays a catalog of what Omarchy can install. Since a dimmed row means
-  "you already have this", it earns the same ✓ as `checked` does elsewhere.
-  The dim level is the theme's `[menu] disabled-alpha` (default 0.4), and a
-  summon can override it for one session with the `disabledAlpha` payload
-  option.
+- `disabled` keeps the row listed but dims it and makes it unselectable: cursor, pointer, and Enter all step over it, and search omits it. The Install submenus use it so software already on the machine reads as installed rather than vanishing from the list it was installed from — the list stays a catalog of what Omarchy can install. A row whose only statement is `disabled:` therefore earns the same ✓ as `checked` does elsewhere ("you already have this"). A row that defines its own `checked:` owns its ✓ exclusively — its dimmed siblings are unavailable, not current — so such a row never picks up the disabled fallback mark. The dim level is the theme's `[menu] disabled-alpha` (default 0.4), and a summon can override it for one session with the `disabledAlpha` payload option.
 
 Install rows should therefore carry `disabled:` with the presence check, not
 `when:`; Remove rows are the opposite, hiding via `when:` what is not there
