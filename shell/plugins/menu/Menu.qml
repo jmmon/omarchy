@@ -24,10 +24,11 @@ Item {
 
     if (payload.fontFamily) root.fontFamily = payload.fontFamily
 
-    // checkedResults is normally filled by the async guard batch after open,
-    // so a caller that already knows the ✓ state (the batch confirms it, it
-    // does not override it) can prime the first paint instead of showing
-    // stale markers until that batch lands.
+    // checkedResults is normally filled by the async guard batch after open.
+    // A caller that already knows the ✓ state can prime the first paint to
+    // avoid stale markers until that batch lands. When the guard batch
+    // resolves, it replaces checkedResults wholesale; primed values for IDs
+    // with no checked: guard from the batch are not preserved.
     if (payload.checked && typeof payload.checked === "object") {
       for (var ck in payload.checked) {
         if (Object.prototype.hasOwnProperty.call(payload.checked, ck))
@@ -879,6 +880,9 @@ Item {
     if (initialId) {
       var idRow = root.indexOfItemId(initialId)
       if (idRow >= 0) selectedIndex = idRow
+    }
+    if (initialId || typeof initialIndex === "number") {
+      selectedIndex = Math.min(Math.max(selectedIndex, 0), Math.max(displayModel.count - 1, 0))
       root.settleCursor()
     }
     invalidateVolatileProvider(activeMenu)
