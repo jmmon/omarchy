@@ -481,6 +481,25 @@ assert(
   /function indexOfItemId\(id\)[\s\S]*if \(displayModel\.get\(ri\)\.itemId === id\) return ri[\s\S]*return -1/.test(menuQml),
   'menu maps a row id to a display index'
 )
+  assert(
+    /function indexOfItemId\(id\)[\s\S]*if \(displayModel\.get\(ri\)\.itemId === id\) return ri[\s\S]*return -1/.test(menuQml),
+    'menu maps a row id to a display index'
+  )
+
+  
+  // Behavior: provider merge creates provider rows and indexOfItemId can target them
+  const firstItems = { root: { label: 'Root', children: ['apps'] }, apps: { label: 'Apps', children: [] } }
+  const firstOrder = ['root', 'apps']
+  const providerRows = [
+    { id: 'apps.editor', label: 'Editor' },
+    { id: 'apps.browser', label: 'Browser' }
+  ]
+  const mergedProvider = menu.swapProviderRows(firstItems, firstOrder, 'apps', providerRows)
+  assert(
+    mergedProvider.itemOrder.includes('apps.editor') && mergedProvider.itemOrder.includes('apps.browser'),
+    'provider merge inserts provider rows into order'
+  )
+
 // A dimmed row is not a target: the cursor steps over it, the pointer refuses
 // to land on it, and neither Enter nor a click can reach it.
 assert(
