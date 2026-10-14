@@ -545,6 +545,56 @@ assert(
   /\(event\.key === Qt\.Key_Backspace \|\| event\.key === Qt\.Key_Left\) && !root\.filterText[\s\S]*root\.goBack\(\)/.test(menuQml),
   'menu Left key follows empty-filter Backspace navigation'
 )
+// A summon's starting row can be named by id or by ordinal. At open time
+// the rows may not exist yet -- a first-ever summon of a provider menu
+// starts with an empty display -- so the QML side parks the request and
+// re-resolves it when the provider merge lands. The model helper covers
+// the lookup and the ordinal fallback, in display order.
+{
+  const appsBaseItems = { apps: { id: 'apps', kind: 'menu', label: 'Apps', provider: 'apps' } }
+  const appsBaseOrder = ['apps']
+  const appRows = values => values.map(v => ({ id: `apps.${v}`, kind: 'app', parent: 'apps', label: v }))
+  const merged = menu.mergeAppRows(appsBaseItems, appsBaseOrder, appRows(['alacritty', 'firefox', 'youtube']))
+  // The QML side sorts apps alphabetically at display time (Menu.qml
+  // render block). Mirror that here so the test exercises the id lookup
+  // against display order, not item order.
+  const displayIds = merged.itemOrder.filter(id => id !== 'apps').sort()
+  assertEqual(menu.resolveInitialRow([], 'apps.firefox', null), -1, 'empty display resolves nothing yet')
+  assertEqual(
+    menu.resolveInitialRow(displayIds, 'apps.firefox', null),
+    displayIds.indexOf('apps.firefox'),
+    'pending id resolves against the post-merge display order'
+  )
+  assertEqual(menu.resolveInitialRow(displayIds, null, 2), 2, 'pending ordinal resolves after rows land')
+  assertEqual(menu.resolveInitialRow(displayIds, null, 99), 99, 'caller is responsible for clamping the ordinal past the end')
+  assertEqual(menu.resolveInitialRow(displayIds, 'apps.unknown', null), -1, 'an id that never lands resolves to nothing')
+}
+assert(
+  /property var pendingInitial/.test(menuQml)
+    && /function applyPendingInitial\(menuId\)[\s\S]*MenuModel\.resolveInitialRow/.test(menuQml),
+  'menu parks a summoning start request and re-resolves it through the model helper'
+)
+assert(
+  /if \(initialId \|\| typeof initialIndex === "number"\)[\s\S]*?root\.pendingInitial = \{/.test(menuQml),
+  'menu parks the request when the summoned menu has a provider whose rows are pending'
+)
+assert(
+  /function mergeAppRows\(\)[\s\S]*?root\.applyPendingInitial\("apps"\)/.test(menuQml)
+    && /function mergeProviderRows\(rows, menuId, providerKey\)[\s\S]*?root\.applyPendingInitial\(menuId\)/.test(menuQml),
+  'provider merges re-resolve a parked summon start request'
+)
+assert(
+  /function select\(delta\)[\s\S]*?root\.pendingInitial = null/.test(menuQml)
+    && /function setFilter\(nextFilter\)[\s\S]*?root\.pendingInitial = null/.test(menuQml)
+    && /function setActiveMenu\(id, pushHistory, fromPointer\)[\s\S]*?root\.pendingInitial = null/.test(menuQml)
+    && /function selectFromPointer\(index, item, mouse\)[\s\S]*?root\.pendingInitial = null/.test(menuQml)
+    && /function cancel\(\)[\s\S]*?root\.pendingInitial = null/.test(menuQml)
+    && /function applySelected\(id, action\)[\s\S]*?root\.pendingInitial = null/.test(menuQml)
+    && /function openDmenu\(payload\)[\s\S]*?root\.pendingInitial = null/.test(menuQml)
+    && /function openExistingMenu\(initialMenu, initialIndex, initialId\)[\s\S]*?root\.pendingInitial = null/.test(menuQml)
+    && /function rebuildItemsFromSources\(\)[\s\S]*?root\.pendingInitial = null/.test(menuQml),
+  'pending initial selection is cleared on user input and lifecycle resets'
+)
 assert(
   /PointerMoveGate\s*\{[\s\S]*id: pointerGate[\s\S]*referenceItem: card[\s\S]*\}/.test(menuQml),
   'menu uses shared pointer movement gate in card coordinates'

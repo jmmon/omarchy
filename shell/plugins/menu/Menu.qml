@@ -18,6 +18,15 @@ Item {
   // `omarchy-shell shell summon omarchy.menu ...` and close() when hidden.
   property string pendingInitialMenu: "root"
 
+  // The summon's starting-row request, parked until the rows it names are
+  // actually on screen. Provider-backed menus (apps, fonts, ...) fill
+  // after open() and may also re-fill on every entry (volatile providers),
+  // so the request can outlive a single openExistingMenu. Shape:
+  // { id: string, index: number|null, serial: number }. Null when nothing
+  // is pending. Cleared by user navigation, filter typing, opening
+  // another menu, cancel/apply, and a fresh open.
+  property var pendingInitial: null
+
   function open(payloadJson) {
     var payload = ({})
     try { payload = JSON.parse(payloadJson || "{}") } catch (e) { payload = ({}) }
@@ -260,6 +269,7 @@ Item {
     root.providerRevision += 1
     root.providersLoaded = ({})
     root.providerQueue = []
+    root.pendingInitial = null
     root.items = mergedMenu.items
     root.itemOrder = mergedMenu.itemOrder
     root.rowsLoaded = true
@@ -338,6 +348,7 @@ Item {
     root.items = merged.items
     root.itemOrder = merged.itemOrder
     if (root.opened) root.rebuildDisplay()
+    if (root.opened) root.applyPendingInitial("apps")
   }
 
   function startProviderForMenu(id) {
@@ -403,6 +414,7 @@ Item {
     root.items = merged.items
     root.itemOrder = merged.itemOrder
     if (root.opened) root.rebuildDisplay()
+    if (root.opened) root.applyPendingInitial(menuId)
   }
 
   function startNextProvider() {
@@ -573,6 +585,26 @@ Item {
     return -1
   }
 
+  // Provider rows land after open() already resolved the starting row
+  // against an empty display -- a first-ever summon of a provider menu, or
+  // any summon of a volatile one. Apply the parked request when rows for
+  // the summoned menu arrive. id wins, ordinal is the fallback, then
+  // clamp and settle like open() does. One-shot: a successful apply (or
+  // a stale serial, or rows arriving for a menu the request did not
+  // name) consumes the parking so a later user action is not yanked.
+  function applyPendingInitial(menuId) {
+    if (!pendingInitial) return
+    if (pendingInitial.serial !== requestSerial) { pendingInitial = null; return }
+    if (activeMenu !== menuId) return
+    var ids = []
+    for (var ri = 0; ri < displayModel.count; ri++) ids.push(displayModel.get(ri).itemId)
+    var target = MenuModel.resolveInitialRow(ids, pendingInitial.id, pendingInitial.index)
+    pendingInitial = null
+    if (target < 0) return
+    selectedIndex = Math.min(Math.max(target, 0), Math.max(displayModel.count - 1, 0))
+    settleCursor()
+  }
+
   function rebuildDmenuDisplay() {
     displayModel.clear()
     root.searchDivider = false
@@ -731,6 +763,7 @@ Item {
     delta = Number(delta) || 0
 
     root.disarmPointer()
+    root.pendingInitial = null
     var from = cursorActive ? selectedIndex + delta : (delta < 0 ? displayModel.count - 1 : 0)
     var target = root.nextSelectable(from, delta)
     if (target < 0) return
@@ -742,6 +775,7 @@ Item {
 
   function setFilter(nextFilter) {
     panel.freezeCardTop()
+    root.pendingInitial = null
     root.filterText = nextFilter
     root.selectedIndex = 0
     root.cursorActive = root.mode !== "input"
@@ -753,6 +787,7 @@ Item {
   function setActiveMenu(id, pushHistory, fromPointer) {
     panel.freezeCardTop()
     if (!root.item(id)) id = "root"
+    root.pendingInitial = null
     if (pushHistory && id !== root.activeMenu) root.navStack = root.navStack.concat([root.activeMenu])
     root.activeMenu = id
     root.filterText = ""
@@ -803,6 +838,7 @@ Item {
       var label = row.label
       applySerial = requestSerial
       opened = false
+      root.pendingInitial = null
       filterText = ""
       if (root.appLibrary) root.appLibrary.launch(appId, label)
     } else {
@@ -848,6 +884,7 @@ Item {
 
     applySerial = requestSerial
     opened = false
+    root.pendingInitial = null
     filterText = ""
     root.runAction(action)
   }
@@ -855,6 +892,7 @@ Item {
   function cancel() {
     if (root.dmenuActive) root.finishRequest(null)
     opened = false
+    root.pendingInitial = null
     filterText = ""
   }
 
@@ -864,6 +902,7 @@ Item {
     requestActive = false
     selectionFile = ""
     doneFile = ""
+    root.pendingInitial = null
     activeMenu = root.item(initialMenu) ? initialMenu : "root"
     navStack = []
     filterText = ""
@@ -884,6 +923,22 @@ Item {
     if (initialId || typeof initialIndex === "number") {
       selectedIndex = Math.min(Math.max(selectedIndex, 0), Math.max(displayModel.count - 1, 0))
       root.settleCursor()
+      // Park the request when the summoned menu is provider-backed and
+      // either the rows have not landed yet (first summon of a provider
+      // menu) or a volatile provider is about to replace the visible
+      // rows with a fresh list. applyPendingInitial re-resolves the
+      // index against the post-merge display order; the inline resolve
+      // above already gave the user the best first paint we can show
+      // from the currently visible rows.
+      var openEntry = root.item(activeMenu)
+      var openSpec = openEntry && openEntry.provider ? root.providers[openEntry.provider] : null
+      if (openSpec && (!root.providersLoaded[activeMenu] || openSpec.volatile)) {
+        root.pendingInitial = {
+          id: initialId || "",
+          index: typeof initialIndex === "number" ? initialIndex : null,
+          serial: requestSerial
+        }
+      }
     }
     invalidateVolatileProvider(activeMenu)
     loadProviderForMenu(activeMenu)
@@ -906,6 +961,7 @@ Item {
     dmenuMaxHeight = Math.max(0, Number(payload.maxHeight || 0))
     activeMenu = "root"
     navStack = []
+    root.pendingInitial = null
     filterText = ""
     selectedIndex = 0
     cursorActive = mode !== "input"
@@ -953,6 +1009,7 @@ Item {
   function selectFromPointer(index, item, mouse) {
     if (!pointerGate.moved(item, mouse)) return
     if (!root.rowSelectable(index)) return
+    root.pendingInitial = null
     root.cursorActive = true
     root.selectedIndex = index
   }
