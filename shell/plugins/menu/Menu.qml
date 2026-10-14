@@ -35,9 +35,10 @@ Item {
 
     // checkedResults is normally filled by the async guard batch after open.
     // A caller that already knows the ✓ state can prime the first paint to
-    // avoid stale markers until that batch lands. When the guard batch
-    // resolves, it replaces checkedResults wholesale; primed values for IDs
-    // with no checked: guard from the batch are not preserved.
+    // avoid stale markers until that batch lands. Only a row that declares a
+    // checked: guard can show a marker (MenuModel.labelFor requires it), so a
+    // primed id for an unguarded row is inert. The guard batch then replaces
+    // checkedResults wholesale, confirming the primed values it agrees with.
     if (payload.checked && typeof payload.checked === "object") {
       for (var ck in payload.checked) {
         if (Object.prototype.hasOwnProperty.call(payload.checked, ck))
